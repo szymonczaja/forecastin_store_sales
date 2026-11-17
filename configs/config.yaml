@@ -41,5 +41,5 @@ training:
 
 tracking:
   experiment_name: store-sales-experiments
-  tracking_uri: ./mlruns
+  tracking_uri: sqlite:///mlflow.db
   log_model: true
