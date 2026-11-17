@@ -4,9 +4,27 @@ from src.preprocessing import load_raw_data, prepare_and_split_data
 from src.train import train_model, predict, calc_rmsle
 from pathlib import Path
 import mlflow 
+import subprocess
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+def get_git_info(): 
+    commit = subprocess.run(
+        ['git', 'rev-parse', 'HEAD'], 
+        cwd=PROJECT_ROOT, 
+        capture_output=True, 
+        text=True, 
+        check=True
+    ).stdout().strip()
+    dirty = subprocess.run(
+        ['git', 'status', '--porcelain'], 
+        cwd=PROJECT_ROOT, 
+        capture_output=True, 
+        text=True, 
+        check=True, 
+    ).stdout().strip() != ""
+    return commit, dirty 
 
 
 def main(): 
@@ -28,9 +46,12 @@ def main():
     early_stopping_rounds = config['training']['early_stopping_rounds']
     eval_metric = config['training']['eval_metric']
     tracking_config = config['tracking']
+    git_commit, git_dirty = get_git_info()
     mlflow.set_tracking_uri(tracking_config['tracking_uri'])
     mlflow.set_experiment(tracking_config['experiment_name'])
     with mlflow.start_run():
+        mlflow.set_tag("git_commit", git_commit) 
+        mlflow.set_tag("git_dirty", str(git_dirty).lower())
         model = train_model(X_train, y_train, X_val, y_val,
                             params_config, early_stopping_rounds,
                             eval_metric)
