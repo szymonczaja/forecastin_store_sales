@@ -8,3 +8,8 @@ models/
 .pytest_cache/
 .ruff_cache/
 .vscode
+
+
+mlflow.db
+mlruns/
+mlartifacts/
