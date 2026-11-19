@@ -3,6 +3,7 @@ import numpy as np
 
 
 def calendar_features(X : pd.DataFrame) -> pd.DataFrame: 
+    """Creating and adding calendar features to dataframe"""
     X['year'] = X['date'].dt.year
     X['month'] = X['date'].dt.month
     X['day_of_week'] = X['date'].dt.dayofweek + 1
@@ -12,6 +13,7 @@ def calendar_features(X : pd.DataFrame) -> pd.DataFrame:
 
 
 def add_lag_features(X : pd.DataFrame, group_cols, lags) -> pd.DataFrame:
+    """Adding lag features to DataFrame"""
     grouped = X.groupby(group_cols)['sales']
     for lag in lags: 
         X[f'lag_{lag}'] = grouped.shift(lag) 
@@ -19,6 +21,7 @@ def add_lag_features(X : pd.DataFrame, group_cols, lags) -> pd.DataFrame:
 
 
 def add_rolling_features(X : pd.DataFrame, group_cols, horizon, rolling_windows, rolling_std_window) -> pd.DataFrame: 
+    """Add rolling features to DataFrame"""
     shifted = X.groupby(group_cols)['sales'].shift(horizon) 
     grouped = shifted.groupby([X[c] for c in group_cols])
     for w in rolling_windows: 
@@ -27,12 +30,14 @@ def add_rolling_features(X : pd.DataFrame, group_cols, horizon, rolling_windows,
     return X 
 
 
-def sort_data(X: pd.DataFrame, group_cols) -> pd.DataFrame: 
+def sort_data(X: pd.DataFrame, group_cols: list) -> pd.DataFrame: 
+    """Sorting DataFrame before splitting in preprocessor function"""
     sort_cols = group_cols + ['date']
     return X.sort_values(by=sort_cols).copy()
 
 
-def preprocessor(X : pd.DataFrame, feature_config) -> pd.DataFrame: 
+def preprocessor(X : pd.DataFrame, feature_config: dict) -> pd.DataFrame: 
+    """Prepare data, add new features"""
     group_cols = feature_config['group_columns']
     lags = feature_config['lags']
     horizon = feature_config['horizon']
@@ -45,7 +50,8 @@ def preprocessor(X : pd.DataFrame, feature_config) -> pd.DataFrame:
     return X_sorted
 
 
-def convert_object_to_category(df): 
+def convert_object_to_category(df: pd.DataFrame) -> pd.DataFrame: 
+    """Converting objects features to category because of LGBM"""
     object_cols = df.select_dtypes(include=['object']).columns
     df[object_cols] = df[object_cols].astype('category')
     return df 
@@ -57,7 +63,8 @@ def combine_train_test(train: pd.DataFrame, test: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([train, test], ignore_index=True) 
 
 
-def split_data(df: pd.DataFrame, val_start): 
+def split_data(df: pd.DataFrame, val_start) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: 
+    """Splitting data to three datasets: Train, Val and Test"""
     val_start = pd.Timestamp(val_start) 
     known = df[df['is_test'] == 0] 
     train = known[known['date'] < val_start] 
@@ -71,13 +78,15 @@ def split_data(df: pd.DataFrame, val_start):
     )
 
 
-def load_raw_data(train_path, test_path) -> tuple[pd.DataFrame, pd.DataFrame]: 
+def load_raw_data(train_path: str, test_path: str) -> tuple[pd.DataFrame, pd.DataFrame]: 
+    """Loading raw data from path"""
     train_df = pd.read_csv(train_path, parse_dates=['date']) 
     test_df = pd.read_csv(test_path, parse_dates=['date']) 
     return (train_df, test_df) 
  
 
 def prepare_and_split_data(train: pd.DataFrame, test: pd.DataFrame, config) -> tuple[pd.DataFrame, pd.Series]: 
+    """Invoke all of steps to preapre data for model"""
     val_start = config['data']['validation_start']
     feature_config = config['features']
     df = combine_train_test(train, test) 
