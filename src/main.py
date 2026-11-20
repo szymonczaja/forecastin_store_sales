@@ -1,29 +1,30 @@
 import argparse 
+import subprocess
+from pathlib import Path
+import mlflow
 from src.config import load_config, validate_config
 from src.preprocessing import load_raw_data, prepare_and_split_data
-from src.train import train_model, predict, calc_rmsle
-from pathlib import Path
-import mlflow 
-import subprocess
+from src.train import train_model, predict, calc_rmsle, calc_mae
+from src.tracking.mlflow_tracker import setup_tracking, log_run_metadata, log_training_results, log_model_artifact
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-def get_git_info(): 
+def get_git_info() -> tuple[str, bool]: 
     commit = subprocess.run(
         ['git', 'rev-parse', 'HEAD'], 
         cwd=PROJECT_ROOT, 
         capture_output=True, 
         text=True, 
         check=True
-    ).stdout().strip()
+    ).stdout.strip()
     dirty = subprocess.run(
         ['git', 'status', '--porcelain'], 
         cwd=PROJECT_ROOT, 
         capture_output=True, 
         text=True, 
         check=True, 
-    ).stdout().strip() != ""
+    ).stdout.strip() != ""
     return commit, dirty 
 
 
@@ -46,25 +47,25 @@ def main():
     early_stopping_rounds = config['training']['early_stopping_rounds']
     eval_metric = config['training']['eval_metric']
     tracking_config = config['tracking']
+    model_config = config['model']
+    features_config = config['features']
+    training_config = config['training']
     git_commit, git_dirty = get_git_info()
-    mlflow.set_tracking_uri(tracking_config['tracking_uri'])
-    mlflow.set_experiment(tracking_config['experiment_name'])
+    setup_tracking(tracking_config)
     with mlflow.start_run():
-        mlflow.set_tag("git_commit", git_commit) 
-        mlflow.set_tag("git_dirty", str(git_dirty).lower())
+        log_run_metadata(git_commit, git_dirty, model_config['name'])
         model = train_model(X_train, y_train, X_val, y_val,
                             params_config, early_stopping_rounds,
                             eval_metric)
         y_pred = predict(model, X_val) 
         rmsle = calc_rmsle(y_val, y_pred) 
-        mlflow.log_params(params_config) 
-        mlflow.log_metric("RMSLE", rmsle) 
-        mlflow.log_metric("best_iteration", model.best_iteration_)
-        mlflow.lightgbm.log_model(model, name="lightgbm-model") 
-        mlflow.log_dict(config, "config.json")
+        mae = calc_mae(y_val, y_pred)
+        best_iter = model.best_iteration_
+        metrics = {'rmsle':rmsle, 'mae':mae, 'best_iter':best_iter}
+        log_training_results(params_config, features_config, training_config, metrics)
+        log_model_artifact(model, config)
     print(f"Model best iteration: {model.best_iteration_}")
     print(f"Model score RMSLE: {rmsle:.4f}")
     
-
 if __name__ == "__main__": 
     main()

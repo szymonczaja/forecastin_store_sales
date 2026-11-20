@@ -1,5 +1,6 @@
 import numpy as np 
 import lightgbm as lgb 
+from sklearn.metrics import mean_absolute_error
 
 def calc_rmsle(y_true, y_pred) -> float: 
     if len(y_pred) != len(y_true): 
@@ -7,6 +8,9 @@ def calc_rmsle(y_true, y_pred) -> float:
     y_true = np.asarray(y_true) 
     y_pred = np.clip(np.asarray(y_pred), 0, None)
     return float(np.sqrt(np.mean((np.log1p(y_pred) - np.log1p(y_true))**2)))
+
+def calc_mae(y_true, y_pred) -> float: 
+    return mean_absolute_error(y_true, y_pred)
 
 def train_model(X_train, y_train, X_val, y_val, params_config, early_stopping_rounds, eval_metric_config): 
     model = lgb.LGBMRegressor(**params_config) 
