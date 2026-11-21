@@ -1,12 +1,11 @@
 import argparse 
 import subprocess
 from pathlib import Path
-import mlflow
 from src.config import load_config, validate_config
 from src.preprocessing import load_raw_data, prepare_and_split_data
 from src.train import train_model, predict, calc_rmsle, calc_mae
-from src.tracking.mlflow_tracker import setup_tracking, log_run_metadata, log_training_results, log_model_artifact
-
+from src.tracking.mlflow_tracker import log_run_metadata, log_training_results, log_model_artifact, mlflow_run, log_backtesting_results
+from src.backtesting.backtesting import run_backtesting, generate_time_splits, aggregate_results
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,12 +27,61 @@ def get_git_info() -> tuple[str, bool]:
     return commit, dirty 
 
 
+@mlflow_run
+def run_training(config, git_commit, git_dirty, X_train, y_train, X_val, y_val): 
+    params_config = config['model']['params']
+    features_config = config['features']
+    training_config = config['training']
+    model_config = config['model']
+    early_stopping_rounds = training_config['early_stopping_rounds']
+    eval_metric = training_config['eval_metric']
+    log_run_metadata(git_commit, git_dirty, model_config['name'])
+    model = train_model(X_train, y_train, X_val, y_val,
+                            params_config, early_stopping_rounds,
+                            eval_metric)
+    y_pred = predict(model, X_val) 
+    rmsle = calc_rmsle(y_val, y_pred) 
+    mae = calc_mae(y_val, y_pred)
+    best_iteration = model.best_iteration_
+    metrics = {'rmsle':rmsle, 'mae':mae, 'best_iteration':best_iteration}
+    log_training_results(params_config, features_config, training_config, metrics)
+    log_model_artifact(model, config)    
+
+
+@mlflow_run
+def run_backtest(config, df):
+    features_config = config['features']
+    params_config = config['model']['params']
+    training_config = config['training']
+    backtesting_config = config['backtesting']
+    eval_metric = training_config['eval_metric']
+    early_stopping_rounds = training_config['early_stopping_rounds']
+    initial_train_end = backtesting_config['initial_train_end']
+    validation_days = backtesting_config['validation_days'] 
+    folds = generate_time_splits(df, initial_train_end, validation_days)
+    backtesting_results = run_backtesting(df, folds, params_config, early_stopping_rounds, eval_metric, features_config)
+    results_df, summary = aggregate_results(backtesting_results)
+    log_backtesting_results(
+        params_config,
+        features_config,
+        training_config,
+        backtesting_config,
+        results_df,
+        summary
+    )
+
 def main(): 
     parser = argparse.ArgumentParser() 
     parser.add_argument(
         "--config", 
         type=str, 
         required=True
+    )
+    parser.add_argument(
+        "--mode",
+        type=str, 
+        choices=['train', 'backtest'], 
+        default="train"
     )
     args = parser.parse_args()
     config_path = Path(args.config)
@@ -42,30 +90,12 @@ def main():
     train_path = Path(PROJECT_ROOT / config['data']['train_path'])
     test_path = Path(PROJECT_ROOT / config['data']['test_path'])
     train_df, test_df = load_raw_data(train_path, test_path)
-    X_train, y_train, X_val, y_val, X_test, test_ids = prepare_and_split_data(train_df, test_df, config)
-    params_config = config['model']['params']
-    early_stopping_rounds = config['training']['early_stopping_rounds']
-    eval_metric = config['training']['eval_metric']
-    tracking_config = config['tracking']
-    model_config = config['model']
-    features_config = config['features']
-    training_config = config['training']
-    git_commit, git_dirty = get_git_info()
-    setup_tracking(tracking_config)
-    with mlflow.start_run():
-        log_run_metadata(git_commit, git_dirty, model_config['name'])
-        model = train_model(X_train, y_train, X_val, y_val,
-                            params_config, early_stopping_rounds,
-                            eval_metric)
-        y_pred = predict(model, X_val) 
-        rmsle = calc_rmsle(y_val, y_pred) 
-        mae = calc_mae(y_val, y_pred)
-        best_iter = model.best_iteration_
-        metrics = {'rmsle':rmsle, 'mae':mae, 'best_iter':best_iter}
-        log_training_results(params_config, features_config, training_config, metrics)
-        log_model_artifact(model, config)
-    print(f"Model best iteration: {model.best_iteration_}")
-    print(f"Model score RMSLE: {rmsle:.4f}")
+    if args.mode == "train": 
+        X_train, y_train, X_val, y_val, X_test, test_ids = prepare_and_split_data(train_df, test_df, config)
+        git_commit, git_dirty = get_git_info()
+        run_training(config, git_commit, git_dirty, X_train, y_train, X_val, y_val)
+    elif args.mode == "backtest": 
+        run_backtest(config, train_df)
     
 if __name__ == "__main__": 
     main()

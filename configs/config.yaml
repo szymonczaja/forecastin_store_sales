@@ -43,3 +43,7 @@ tracking:
   experiment_name: store-sales-experiments
   tracking_uri: sqlite:///mlflow.db
   log_model: true
+
+backtesting:
+  initial_train_end: "2016-06-30"
+  validation_days: 16
