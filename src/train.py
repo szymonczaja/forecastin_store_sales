@@ -1,5 +1,6 @@
 import numpy as np 
 import lightgbm as lgb 
+import optuna
 from sklearn.metrics import mean_absolute_error
 
 def calc_rmsle(y_true, y_pred) -> float: 
@@ -27,4 +28,45 @@ def predict(model, X):
     y_pred = np.expm1(y_pred) 
     return np.clip(y_pred, 0, None) 
 
+
+def objective(trial, X_train, y_train, X_val, y_val, params_config, early_stopping_rounds, eval_metric_config) -> float:
+    params = params_config.copy()
+    params.update({
+    "learning_rate": trial.suggest_float(
+        "learning_rate", 0.01, 0.1, log=True
+    ),
+    "num_leaves": trial.suggest_int(
+        "num_leaves", 20, 150
+    ),
+    "max_depth": trial.suggest_int(
+        "max_depth", 4, 12
+    ),
+    "min_child_samples": trial.suggest_int(
+        "min_child_samples", 10, 100
+    ),
+    "subsample": trial.suggest_float(
+        "subsample", 0.6, 1.0
+    ),
+    "colsample_bytree": trial.suggest_float(
+        "colsample_bytree", 0.6, 1.0
+    ),
+    "reg_alpha": trial.suggest_float(
+        "reg_alpha", 1e-8, 10.0, log=True
+    ),
+    "reg_lambda": trial.suggest_float(
+        "reg_lambda", 1e-8, 10.0, log=True
+    ),
+    })
+    model = train_model(
+        X_train, 
+        y_train, 
+        X_val, 
+        y_val, 
+        params, 
+        early_stopping_rounds, 
+        eval_metric_config
+    )
+    pred = predict(model, X_val)
+    score = calc_mae(y_val, pred) 
+    return score 
 

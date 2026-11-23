@@ -1,9 +1,11 @@
 import argparse 
 import subprocess
 from pathlib import Path
+import optuna
+from functools import partial
 from src.config import load_config, validate_config
 from src.preprocessing import load_raw_data, prepare_and_split_data
-from src.train import train_model, predict, calc_rmsle, calc_mae
+from src.train import train_model, predict, calc_rmsle, calc_mae, objective
 from src.tracking.mlflow_tracker import log_run_metadata, log_training_results, log_model_artifact, mlflow_run, log_backtesting_results
 from src.backtesting.backtesting import run_backtesting, generate_time_splits, aggregate_results
 
@@ -70,6 +72,30 @@ def run_backtest(config, df):
         summary
     )
 
+def run_hpo(config, git_commit, git_dirty, X_train, y_train, X_val, y_val):
+    params_config = config['model']['params'] 
+    early_stopping_rounds = config['training']['early_stopping_rounds']
+    eval_metric_config = config['training']['eval_metric']
+    hpo_config = config['hpo']
+    trial = hpo_config['n_trials']
+    direction = hpo_config['direction']
+    objective_func = partial(
+        objective,
+        trial=trial, 
+        X_train=X_train, 
+        y_train=y_train, 
+        X_val=X_val, 
+        y_val=y_val, 
+        params_config=params_config, 
+        early_stopping_rounds=early_stopping_rounds, 
+        eval_metric_config=eval_metric_config
+    )
+    study = optuna.create_study(direction=direction)
+    study.optimize(objective_func, n_trials=trial)
+    best_params = study.best_params 
+    best_score = study.best_value
+
+
 def main(): 
     parser = argparse.ArgumentParser() 
     parser.add_argument(
@@ -80,7 +106,7 @@ def main():
     parser.add_argument(
         "--mode",
         type=str, 
-        choices=['train', 'backtest'], 
+        choices=['train', 'backtest', 'hpo'], 
         default="train"
     )
     args = parser.parse_args()
@@ -90,12 +116,16 @@ def main():
     train_path = Path(PROJECT_ROOT / config['data']['train_path'])
     test_path = Path(PROJECT_ROOT / config['data']['test_path'])
     train_df, test_df = load_raw_data(train_path, test_path)
-    if args.mode == "train": 
+    if args.mode in ["train", "hpo"]: 
         X_train, y_train, X_val, y_val, X_test, test_ids = prepare_and_split_data(train_df, test_df, config)
         git_commit, git_dirty = get_git_info()
-        run_training(config, git_commit, git_dirty, X_train, y_train, X_val, y_val)
+        if args.mode == "train":
+            run_training(config, git_commit, git_dirty, X_train, y_train, X_val, y_val)
+        elif args.mode == "hpo":
+            run_hpo(config, git_commit, git_dirty, X_train, y_train, X_val, y_val)
     elif args.mode == "backtest": 
         run_backtest(config, train_df)
+    
     
 if __name__ == "__main__": 
     main()
