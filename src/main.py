@@ -2,11 +2,12 @@ import argparse
 import subprocess
 from pathlib import Path
 import optuna
+import mlflow
 from functools import partial
 from src.config import load_config, validate_config
 from src.preprocessing import load_raw_data, prepare_and_split_data
 from src.train import train_model, predict, calc_rmsle, calc_mae, objective
-from src.tracking.mlflow_tracker import log_run_metadata, log_training_results, log_model_artifact, mlflow_run, log_backtesting_results
+from src.tracking.mlflow_tracker import log_run_metadata, log_training_results, log_model_artifact, mlflow_run, log_backtesting_results, log_hpo_trial
 from src.backtesting.backtesting import run_backtesting, generate_time_splits, aggregate_results
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -77,23 +78,36 @@ def run_hpo(config, git_commit, git_dirty, X_train, y_train, X_val, y_val):
     early_stopping_rounds = config['training']['early_stopping_rounds']
     eval_metric_config = config['training']['eval_metric']
     hpo_config = config['hpo']
-    trial = hpo_config['n_trials']
+    n_trials = hpo_config['n_trials']
     direction = hpo_config['direction']
-    objective_func = partial(
-        objective,
-        trial=trial, 
-        X_train=X_train, 
-        y_train=y_train, 
-        X_val=X_val, 
-        y_val=y_val, 
-        params_config=params_config, 
-        early_stopping_rounds=early_stopping_rounds, 
-        eval_metric_config=eval_metric_config
-    )
-    study = optuna.create_study(direction=direction)
-    study.optimize(objective_func, n_trials=trial)
-    best_params = study.best_params 
-    best_score = study.best_value
+    mlflow.set_tracking_uri(config['tracking']['tracking_uri'])
+    mlflow.set_experiment(config['tracking']['experiment_name'])
+    with mlflow.start_run(run_name="hpo"):
+        objective_func = partial(
+            objective, 
+            X_train=X_train, 
+            y_train=y_train, 
+            X_val=X_val, 
+            y_val=y_val, 
+            params_config=params_config, 
+            early_stopping_rounds=early_stopping_rounds, 
+            eval_metric_config=eval_metric_config
+        )
+        study = optuna.create_study(direction=direction)
+        study.optimize(objective_func, n_trials=n_trials, callbacks=[log_hpo_trial])
+        best_params = study.best_params 
+        best_score = study.best_value
+        mlflow.log_param("n_trials", n_trials)
+        mlflow.log_param("direction", direction)
+        mlflow.log_metric("best_mae", best_score)
+        mlflow.log_dict(best_params, "best_params.json")
+        mlflow.set_tag("git_commit", git_commit)
+        mlflow.set_tag("git_dirty", str(git_dirty).lower())
+    return {
+        "best_params": best_params, 
+        "best_mae": best_score, 
+        "n_trials" : n_trials
+    }
 
 
 def main(): 
@@ -122,7 +136,8 @@ def main():
         if args.mode == "train":
             run_training(config, git_commit, git_dirty, X_train, y_train, X_val, y_val)
         elif args.mode == "hpo":
-            run_hpo(config, git_commit, git_dirty, X_train, y_train, X_val, y_val)
+            results=run_hpo(config, git_commit, git_dirty, X_train, y_train, X_val, y_val)
+            print(results)
     elif args.mode == "backtest": 
         run_backtest(config, train_df)
     

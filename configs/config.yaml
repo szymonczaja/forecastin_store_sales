@@ -49,6 +49,6 @@ backtesting:
   validation_days: 16
 
 hpo:
-  n_trials: 50
+  n_trials: 5
   direction: minimize
   metric: mae

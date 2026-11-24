@@ -61,3 +61,10 @@ def mlflow_run(func):
         return results
     return wrapper
 
+def log_hpo_trial(study, trial): 
+    with mlflow.start_run(run_name=f"trial_{trial.number}", nested=True):
+        mlflow.log_params(trial.params)
+        mlflow.log_metric("mae", trial.value)
+        mlflow.log_metric("rmsle", trial.user_attrs["rmsle"])
+        mlflow.log_metric("best_iteration", trial.user_attrs["best_iteration"])
+        

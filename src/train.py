@@ -67,6 +67,9 @@ def objective(trial, X_train, y_train, X_val, y_val, params_config, early_stoppi
         eval_metric_config
     )
     pred = predict(model, X_val)
-    score = calc_mae(y_val, pred) 
-    return score 
+    mae = calc_mae(y_val, pred) 
+    rmsle = calc_rmsle(y_val, pred) 
+    trial.set_user_attr("rmsle", rmsle)
+    trial.set_user_attr("best_iteration", model.best_iteration_)
+    return mae
 
