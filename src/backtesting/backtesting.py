@@ -1,6 +1,6 @@
 import pandas as pd 
 from src.train import train_model, predict, calc_mae, calc_rmsle
-from src.preprocessing import preprocessor, convert_object_to_category
+from src.preprocessing.preprocessing import preprocessor, convert_object_to_category
 
 
 def generate_time_splits(df, initial_train_end, validation_days) -> list: 

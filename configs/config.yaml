@@ -52,3 +52,9 @@ hpo:
   n_trials: 5
   direction: minimize
   metric: mae
+
+data:
+  train_path: data/raw/train.csv
+  test_path: data/raw/test.csv
+  data_dir: data/raw
+  validation_start: 2017-07-31

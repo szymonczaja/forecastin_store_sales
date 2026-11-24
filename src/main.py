@@ -5,7 +5,7 @@ import optuna
 import mlflow
 from functools import partial
 from src.config import load_config, validate_config
-from src.preprocessing import load_raw_data, prepare_and_split_data
+from src.preprocessing.preprocessing import load_raw_data, prepare_and_split_data
 from src.train import train_model, predict, calc_rmsle, calc_mae, objective
 from src.tracking.mlflow_tracker import log_run_metadata, log_training_results, log_model_artifact, mlflow_run, log_backtesting_results, log_hpo_trial
 from src.backtesting.backtesting import run_backtesting, generate_time_splits, aggregate_results
