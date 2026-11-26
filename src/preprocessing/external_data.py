@@ -37,11 +37,12 @@ def prepare_transactions(transactions: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Duplicate combination of store_nbr/date found!")
     if transactions_copy.isna().any().any():
         raise ValueError("Missing values found in transactions DataFrame!")
+    if not pd.api.types.is_numeric_dtype(transactions_copy["transactions"]):
+            raise ValueError("Transactions number must be numeric!")
     if (transactions_copy['transactions'] < 0).any(): 
         raise ValueError("Trasactions must be grater or equal to zero!")
-    if not pd.api.types.is_numeric_dtype(transactions_copy["transactions"]):
-        raise ValueError("Transactions number must be numeric!")
     return transactions_copy
+
 
 def prepare_oil(oil: pd.DataFrame) -> pd.DataFrame: 
     oil_copy = oil.copy() 
@@ -72,9 +73,32 @@ def prepare_holidays(holidays: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Missing values in holidays event!")
     return holidays_copy
 
-def merge_external_data(df: pd.DataFrame, external_data: dict) -> pd.DataFrame:
+
+
+def add_transactions_features(transactions: pd.DataFrame, lags: list, rolling_windows: list, horizon: int) -> pd.DataFrame:
+    t_copy = transactions.sort_values(by=['store_nbr', 'date']).copy()
+    for lag in lags:
+        t_copy[f'transactions_lag_{lag}'] = t_copy.groupby('store_nbr')['transactions'].shift(lag)
+    for window in rolling_windows:
+        t_copy[f'transactions_roll_mean_{window}'] =  t_copy.groupby('store_nbr')['transactions'].transform(lambda x: x.shift(horizon).rolling(window).mean())
+    return t_copy 
+
+def add_oil_features(oil: pd.DataFrame, lags: list, rolling_windows: list, horizon: int) -> pd.DataFrame: 
+    o_copy = oil.sort_values(by=['date']).copy() 
+    for lag in lags: 
+        o_copy[f"oil_lag_{lag}"] = o_copy['dcoilwtico'].shift(lag) 
+    for window in rolling_windows: 
+        o_copy[f"oil_roll_mean_{window}"] = o_copy['dcoilwtico'].shift(horizon).rolling(window).mean()
+    return o_copy 
+
+def merge_external_data(df: pd.DataFrame, external_data: dict, lags: list, rolling_windows: list, horizon: int) -> pd.DataFrame:
     df_copy = df.copy()
+    transactions = add_transactions_features(external_data['transactions'], lags, rolling_windows, horizon)
+    oil = add_oil_features(external_data['oil'], lags, rolling_windows, horizon)
+    transactions = transactions.drop(columns=['transactions'])
+    oil = oil.drop(columns=['dcoilwtico'])
     df_copy = df_copy.merge(external_data["stores"], on="store_nbr", how="left", validate="many_to_one")
-    df_copy = df_copy.merge(external_data["transactions"], on=["date", "store_nbr"], how="left", validate="many_to_one")
-    df_copy = df_copy.merge(external_data["oil"], on="date", how="left", validate="many_to_one")
+    df_copy = df_copy.merge(transactions, on=["date", "store_nbr"], how="left", validate="many_to_one")
+    df_copy = df_copy.merge(oil, on="date", how="left", validate="many_to_one")
     return df_copy
+
