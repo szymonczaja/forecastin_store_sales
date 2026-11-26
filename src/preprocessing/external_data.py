@@ -164,7 +164,7 @@ def merge_external_data(df: pd.DataFrame, external_data: dict, lags: list, rolli
     df_copy = df_copy.merge(transactions, on=["date", "store_nbr"], how="left", validate="many_to_one")
     df_copy = df_copy.merge(oil, on="date", how="left", validate="many_to_one")
     holidays = add_holidays_features(external_data["holidays"], external_data["stores"])
-    df_copy = df_copy.merge(holidays, on=["date", "store_nbr"], how="left", validate="one_to_one")
+    df_copy = df_copy.merge(holidays, on=["date", "store_nbr"], how="left", validate="many_to_one")
     holiday_cols = [
         "is_national_holiday",
         "is_regional_holiday",
