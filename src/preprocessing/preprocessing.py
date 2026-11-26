@@ -121,7 +121,7 @@ def prepare_and_split_data(train, test, config):
     val_start = config["data"]["validation_start"]
     feature_config = config["features"]
     df = combine_train_test(train, test)
-    df = merge_external_data(df, load_external_data(config["data"]["data_dir"]))
+    df = merge_external_data(df, load_external_data(config["data"]["data_dir"]), lags=feature_config['lags'], rolling_windows=feature_config['rolling_windows'], horizon=feature_config['horizon'])
     df_preprocessed = preprocessor(df, feature_config)
     df_preprocessed = convert_object_to_category(df_preprocessed)
     return split_data(df_preprocessed, val_start)
