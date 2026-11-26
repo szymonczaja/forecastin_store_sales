@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 from .external_data import load_external_data, merge_external_data

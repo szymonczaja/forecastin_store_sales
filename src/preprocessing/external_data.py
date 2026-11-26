@@ -73,6 +73,69 @@ def prepare_holidays(holidays: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Missing values in holidays event!")
     return holidays_copy
 
+def add_holidays_features(holidays: pd.DataFrame, stores: pd.DataFrame) -> pd.DataFrame:
+    holidays_copy = holidays.copy()
+    stores_copy = stores[["store_nbr", "city", "state"]].copy()
+    holidays_copy = holidays_copy[holidays_copy["transferred"] == False]
+    national = holidays_copy[holidays_copy["locale"] == "National"].copy()
+    national["store_nbr"] = -1
+    regional = holidays_copy[holidays_copy["locale"] == "Regional"].merge(
+        stores_copy,
+        left_on="locale_name",
+        right_on="state",
+        how="inner"
+    )
+
+    local = holidays_copy[holidays_copy["locale"] == "Local"].merge(
+        stores_copy,
+        left_on="locale_name",
+        right_on="city",
+        how="inner"
+    )
+
+    national = national.assign(
+        is_national_holiday=1,
+        is_regional_holiday=0,
+        is_local_holiday=0
+    )
+
+    regional = regional.assign(
+        is_national_holiday=0,
+        is_regional_holiday=1,
+        is_local_holiday=0
+    )
+
+    local = local.assign(
+        is_national_holiday=0,
+        is_regional_holiday=0,
+        is_local_holiday=1
+    )
+
+    national = national.merge(
+        stores_copy[["store_nbr"]],
+        how="cross"
+    )
+
+    holiday_features = pd.concat(
+        [national, regional, local],
+        ignore_index=True
+    )
+
+    holiday_features = holiday_features.groupby(
+        ["date", "store_nbr"],
+        as_index=False
+    ).agg(
+        is_national_holiday=("is_national_holiday", "max"),
+        is_regional_holiday=("is_regional_holiday", "max"),
+        is_local_holiday=("is_local_holiday", "max")
+    )
+
+    holiday_features["is_holiday"] = (
+        holiday_features[
+            ["is_national_holiday", "is_regional_holiday", "is_local_holiday"]
+        ].max(axis=1)
+    )
+    return holiday_features
 
 
 def add_transactions_features(transactions: pd.DataFrame, lags: list, rolling_windows: list, horizon: int) -> pd.DataFrame:
@@ -100,5 +163,13 @@ def merge_external_data(df: pd.DataFrame, external_data: dict, lags: list, rolli
     df_copy = df_copy.merge(external_data["stores"], on="store_nbr", how="left", validate="many_to_one")
     df_copy = df_copy.merge(transactions, on=["date", "store_nbr"], how="left", validate="many_to_one")
     df_copy = df_copy.merge(oil, on="date", how="left", validate="many_to_one")
+    holidays = add_holidays_features(external_data["holidays"], external_data["stores"])
+    df_copy = df_copy.merge(holidays, on=["date", "store_nbr"], how="left", validate="one_to_one")
+    holiday_cols = [
+        "is_national_holiday",
+        "is_regional_holiday",
+        "is_local_holiday",
+        "is_holiday"]
+    df_copy[holiday_cols] = df_copy[holiday_cols].fillna(0)
     return df_copy
 
