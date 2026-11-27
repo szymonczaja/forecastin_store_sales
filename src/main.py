@@ -66,8 +66,6 @@ def run_backtest(config, git_commit, git_dirty, df):
     initial_train_end = backtesting_config['initial_train_end']
     validation_days = backtesting_config['validation_days'] 
     n_folds = backtesting_config['n_folds'] 
-    if validation_days != features_config['horizon']:
-        raise ValueError(f"validation_days ({validation_days}) must equal forecast horizon ({features_config['horizon']})")
     folds = generate_time_splits(df, initial_train_end, validation_days, n_folds)
     backtesting_results = run_backtesting(df, folds, params_config, early_stopping_rounds, eval_metric, features_config, external_data)
     results_df, summary = aggregate_results(backtesting_results)
