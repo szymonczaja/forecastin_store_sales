@@ -3,7 +3,6 @@ project:
   name: store-sales-forecasting
   random_state: 42
 
-
 data:
   train_path: data/raw/train.csv
   test_path: data/raw/test.csv
@@ -56,8 +55,5 @@ hpo:
   direction: minimize
   metric: mae
 
-data:
-  train_path: data/raw/train.csv
-  test_path: data/raw/test.csv
-  data_dir: data/raw
-  validation_start: 2017-07-31
+
+  
