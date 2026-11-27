@@ -4,7 +4,7 @@ import yaml
 REQUIRED_NESTED_KEYS = {
     'project': ['name', 'random_state'],
     'data': ['train_path', 'test_path', 'data_dir', 'validation_start'],
-    'features': ['group_columns', 'horizon', 'lags', 'rolling_windows'],
+    'features': ['group_columns', 'horizon', 'lags', 'rolling_windows', 'rolling_std_window'],
     'model': ['name', 'params'],
     'training': ['early_stopping_rounds', 'eval_metric'],
     'tracking': ['experiment_name', 'tracking_uri', 'log_model'],
@@ -35,13 +35,58 @@ def validate_section(section_name, section):
 
 
 def validate_values(config):
-    if config['features']['horizon'] <= 0: 
-        raise ValueError("features.horizon must be greater than 0")
-    if config['backtesting']['n_folds'] <= 0: 
-        raise ValueError("backtesting.n_folds must be greater than 0")
-    if config['backtesting']['validation_days'] != config['features']['horizon']: 
+    features = config['features']
+    backtesting = config['backtesting']
+    training = config['training']
+    hpo = config['hpo']
+    integer_values = {
+        'features.horizon': features['horizon'],
+        'backtesting.n_folds': backtesting['n_folds'],
+        'backtesting.validation_days': backtesting['validation_days'],
+        'hpo.n_trials': hpo['n_trials'],
+        'training.early_stopping_rounds': training['early_stopping_rounds'], 
+        'features.rolling_std_window': features['rolling_std_window'],
+    }
+    for name, value in integer_values.items():
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError(f"{name} must be an integer")
+        if value <= 0:
+            raise ValueError(f"{name} must be greater than 0")
+    list_values = {
+        'features.lags': features['lags'],
+        'features.rolling_windows': features['rolling_windows'],
+        'features.group_columns': features['group_columns']
+    }
+    for name, value in list_values.items():
+        if not isinstance(value, list) or not value:
+            raise ValueError(f"{name} must be a non-empty list")
+    for name in ['lags', 'rolling_windows']:
+        values = features[name]
+        if not all(
+            isinstance(value, int) and not isinstance(value, bool) and value > 0
+            for value in values
+        ):
+            raise ValueError(f"features.{name} must contain positive integers")
+    if not all(isinstance(value, str) and value for value in features['group_columns']):
+        raise ValueError("features.group_columns must contain non-empty strings")
+    if not isinstance(config['model']['params'], dict):
+        raise ValueError("model.params must be a dictionary")
+    string_values = {
+        'model.name': config['model']['name'],
+        'training.eval_metric': training['eval_metric'],
+        'tracking.experiment_name': config['tracking']['experiment_name'],
+        'tracking.tracking_uri': config['tracking']['tracking_uri'],
+        'hpo.direction': hpo['direction'],
+        'hpo.metric': hpo['metric']
+    }
+    for name, value in string_values.items():
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{name} must be a non-empty string")
+    if not isinstance(config['tracking']['log_model'], bool):
+        raise ValueError("tracking.log_model must be a boolean")
+    if backtesting['validation_days'] != features['horizon']:
         raise ValueError("backtesting.validation_days must be equal to features.horizon")
-    if config['hpo']['direction'] != 'minimize':
+    if hpo['direction'] != 'minimize':
         raise ValueError("hpo.direction must be 'minimize'")
 
 
