@@ -43,7 +43,6 @@ def prepare_transactions(transactions: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Trasactions must be grater or equal to zero!")
     return transactions_copy
 
-
 def prepare_oil(oil: pd.DataFrame) -> pd.DataFrame: 
     oil_copy = oil.copy() 
     required_cols = {'date', 'dcoilwtico'}
@@ -59,7 +58,6 @@ def prepare_oil(oil: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Oil price must be greater or equal to zero!")
     return oil_copy
     
-
 def prepare_holidays(holidays: pd.DataFrame) -> pd.DataFrame: 
     holidays_copy = holidays.copy() 
     required_cols = {"date", "type", "locale", "locale_name", "description", "transferred"}
@@ -78,49 +76,36 @@ def add_holidays_features(holidays: pd.DataFrame, stores: pd.DataFrame) -> pd.Da
     stores_copy = stores[["store_nbr", "city", "state"]].copy()
     holidays_copy = holidays_copy[holidays_copy["transferred"] == False]
     national = holidays_copy[holidays_copy["locale"] == "National"].copy()
-    national["store_nbr"] = -1
     regional = holidays_copy[holidays_copy["locale"] == "Regional"].merge(
         stores_copy,
         left_on="locale_name",
         right_on="state",
         how="inner"
     )
-
     local = holidays_copy[holidays_copy["locale"] == "Local"].merge(
         stores_copy,
         left_on="locale_name",
         right_on="city",
         how="inner"
     )
-
     national = national.assign(
         is_national_holiday=1,
         is_regional_holiday=0,
         is_local_holiday=0
     )
-
     regional = regional.assign(
         is_national_holiday=0,
         is_regional_holiday=1,
         is_local_holiday=0
     )
-
     local = local.assign(
         is_national_holiday=0,
         is_regional_holiday=0,
         is_local_holiday=1
     )
 
-    national = national.merge(
-        stores_copy[["store_nbr"]],
-        how="cross"
-    )
-
-    holiday_features = pd.concat(
-        [national, regional, local],
-        ignore_index=True
-    )
-
+    national = national.merge(stores_copy[["store_nbr"]], how="cross")
+    holiday_features = pd.concat([national, regional, local], ignore_index=True)
     holiday_features = holiday_features.groupby(
         ["date", "store_nbr"],
         as_index=False
@@ -129,7 +114,6 @@ def add_holidays_features(holidays: pd.DataFrame, stores: pd.DataFrame) -> pd.Da
         is_regional_holiday=("is_regional_holiday", "max"),
         is_local_holiday=("is_local_holiday", "max")
     )
-
     holiday_features["is_holiday"] = (
         holiday_features[
             ["is_national_holiday", "is_regional_holiday", "is_local_holiday"]

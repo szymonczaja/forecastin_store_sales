@@ -1,6 +1,7 @@
-import pandas as pd 
+import pandas as pd
 from src.train import train_model, predict, calc_mae, calc_rmsle
 from src.preprocessing.preprocessing import preprocessor, convert_object_to_category
+from src.preprocessing.external_data import merge_external_data
 
 
 def generate_time_splits(df, initial_train_end, validation_days) -> list: 
@@ -25,13 +26,19 @@ def generate_time_splits(df, initial_train_end, validation_days) -> list:
     return folds
 
 
-def split_fold_data(df, fold, feature_config):
+def prepare_fold_data(fold_df: pd.DataFrame, external_data: dict, feature_config: dict) -> pd.DataFrame: 
+    merged_df = merge_external_data(fold_df, external_data, feature_config['lags'], feature_config['rolling_windows'], feature_config['horizon'])
+    preprocessed_df = preprocessor(merged_df, feature_config)
+    return convert_object_to_category(preprocessed_df)  
+
+
+def split_fold_data(df, fold, external_data, feature_config):
     train_start = fold['train_start']
     train_end = fold['train_end']
     val_start = fold['val_start']
     val_end = fold['val_end']
     fold_df = df[df['date'] <= val_end].copy()
-    preprocessed_df = convert_object_to_category(preprocessor(fold_df, feature_config))
+    preprocessed_df = prepare_fold_data(fold_df, external_data, feature_config)
     train_mask = ((preprocessed_df['date'] >= train_start) & (preprocessed_df['date'] <= train_end))
     val_mask = ((preprocessed_df['date'] >= val_start) & (preprocessed_df['date'] <= val_end))
     train_df = preprocessed_df[train_mask]
@@ -44,11 +51,11 @@ def split_fold_data(df, fold, feature_config):
     return X_train, y_train, X_val, y_val 
 
 
-def run_backtesting(df, folds, model_params, early_stopping_rounds, eval_metric, feature_config): 
+def run_backtesting(df, folds, model_params, early_stopping_rounds, eval_metric, feature_config, external_data): 
     """Run backtest for all folds"""
     results = [] 
     for fold in folds: 
-        X_train, y_train, X_val, y_val = split_fold_data(df, fold, feature_config)
+        X_train, y_train, X_val, y_val = split_fold_data(df, fold, external_data, feature_config)
         model = train_model(X_train, y_train, X_val, y_val, model_params, early_stopping_rounds, eval_metric)
         y_pred = predict(model, X_val)
         rmsle = calc_rmsle(y_val, y_pred) 

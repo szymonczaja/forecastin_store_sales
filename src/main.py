@@ -9,6 +9,7 @@ from src.preprocessing.preprocessing import load_raw_data, prepare_and_split_dat
 from src.train import train_model, predict, calc_rmsle, calc_mae, objective
 from src.tracking.mlflow_tracker import log_run_metadata, log_training_results, log_model_artifact, mlflow_run, log_backtesting_results, log_hpo_trial
 from src.backtesting.backtesting import run_backtesting, generate_time_splits, aggregate_results
+from src.preprocessing.external_data import load_external_data 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -49,10 +50,12 @@ def run_training(config, git_commit, git_dirty, X_train, y_train, X_val, y_val):
     metrics = {'rmsle':rmsle, 'mae':mae, 'best_iteration':best_iteration}
     log_training_results(params_config, features_config, training_config, metrics)
     log_model_artifact(model, config)    
+    return model, metrics 
 
 
 @mlflow_run
 def run_backtest(config, df):
+    external_data = load_external_data(config['data']['data_dir'])
     features_config = config['features']
     params_config = config['model']['params']
     training_config = config['training']
@@ -62,7 +65,7 @@ def run_backtest(config, df):
     initial_train_end = backtesting_config['initial_train_end']
     validation_days = backtesting_config['validation_days'] 
     folds = generate_time_splits(df, initial_train_end, validation_days)
-    backtesting_results = run_backtesting(df, folds, params_config, early_stopping_rounds, eval_metric, features_config)
+    backtesting_results = run_backtesting(df, folds, params_config, early_stopping_rounds, eval_metric, features_config, external_data)
     results_df, summary = aggregate_results(backtesting_results)
     log_backtesting_results(
         params_config,
@@ -72,6 +75,7 @@ def run_backtest(config, df):
         results_df,
         summary
     )
+    return results_df, summary
 
 def run_hpo(config, git_commit, git_dirty, X_train, y_train, X_val, y_val):
     params_config = config['model']['params'] 

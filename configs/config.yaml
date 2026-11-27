@@ -3,10 +3,12 @@ project:
   name: store-sales-forecasting
   random_state: 42
 
+
 data:
   train_path: data/raw/train.csv
   test_path: data/raw/test.csv
-  validation_start: "2017-07-31"
+  data_dir: data/raw
+  validation_start: 2017-07-31
 
 features:
   group_columns:
