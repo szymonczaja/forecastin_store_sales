@@ -4,8 +4,12 @@ from src.preprocessing.preprocessing import preprocessor, convert_object_to_cate
 from src.preprocessing.external_data import merge_external_data
 
 
-def generate_time_splits(df, initial_train_end, validation_days) -> list: 
+def generate_time_splits(df, initial_train_end, validation_days, n_folds) -> list[dict]: 
     """Generate temporal train/validation folds based on dates."""
+    if validation_days <= 0: 
+        raise ValueError("Validation days must be greater than 0")
+    if n_folds <= 0: 
+        raise ValueError("n_folds must be greater than 0")
     initial_train_end = pd.Timestamp(initial_train_end)
     train_end = initial_train_end
     val_start = train_end + pd.Timedelta(days=1) 
@@ -23,7 +27,9 @@ def generate_time_splits(df, initial_train_end, validation_days) -> list:
         train_end = val_end 
         val_start = train_end + pd.Timedelta(days=1)
         val_end = val_start + pd.Timedelta(days=validation_days - 1)
-    return folds
+    if len(folds) < n_folds: 
+        raise ValueError(f"Requested {n_folds}, but only {len(folds)} could be generated.")
+    return folds[-n_folds:]
 
 
 def prepare_fold_data(fold_df: pd.DataFrame, external_data: dict, feature_config: dict) -> pd.DataFrame: 

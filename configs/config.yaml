@@ -49,6 +49,7 @@ tracking:
 backtesting:
   initial_train_end: "2016-06-30"
   validation_days: 16
+  n_folds: 5
 
 hpo:
   n_trials: 5

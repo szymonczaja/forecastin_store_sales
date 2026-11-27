@@ -110,11 +110,13 @@ def split_data(df: pd.DataFrame, val_start) -> tuple:
     return (train.drop(columns=drop_cols), train["sales"], val.drop(columns=drop_cols), val["sales"], test.drop(columns=drop_cols), test["id"])
 
 
-def load_raw_data(train_path: str, test_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_raw_data(train_path: str, test_path=None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Loading raw data from path."""
     train_df = pd.read_csv(train_path, parse_dates=["date"])
-    test_df = pd.read_csv(test_path, parse_dates=["date"])
-    return train_df, test_df
+    if test_path:
+        test_df = pd.read_csv(test_path, parse_dates=["date"])
+        return train_df, test_df    
+    return train_df
 
 
 def prepare_and_split_data(train, test, config):

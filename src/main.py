@@ -54,7 +54,8 @@ def run_training(config, git_commit, git_dirty, X_train, y_train, X_val, y_val):
 
 
 @mlflow_run
-def run_backtest(config, df):
+def run_backtest(config, git_commit, git_dirty, df):
+    model_config = config['model']
     external_data = load_external_data(config['data']['data_dir'])
     features_config = config['features']
     params_config = config['model']['params']
@@ -64,7 +65,12 @@ def run_backtest(config, df):
     early_stopping_rounds = training_config['early_stopping_rounds']
     initial_train_end = backtesting_config['initial_train_end']
     validation_days = backtesting_config['validation_days'] 
-    folds = generate_time_splits(df, initial_train_end, validation_days)
+    n_folds = backtesting_config['n_folds'] 
+    if n_folds <= 0: 
+        raise ValueError("n_folds must be greater than 0!")
+    if validation_days != features_config['horizon']:
+        raise ValueError(f"validation_days ({validation_days}) must equal forecast horizon ({features_config['horizon']})")
+    folds = generate_time_splits(df, initial_train_end, validation_days, n_folds)
     backtesting_results = run_backtesting(df, folds, params_config, early_stopping_rounds, eval_metric, features_config, external_data)
     results_df, summary = aggregate_results(backtesting_results)
     log_backtesting_results(
@@ -75,6 +81,7 @@ def run_backtest(config, df):
         results_df,
         summary
     )
+    log_run_metadata(git_commit, git_dirty, f"{model_config['name']}_backtest")
     return results_df, summary
 
 def run_hpo(config, git_commit, git_dirty, X_train, y_train, X_val, y_val):
@@ -105,8 +112,7 @@ def run_hpo(config, git_commit, git_dirty, X_train, y_train, X_val, y_val):
         mlflow.log_param("direction", direction)
         mlflow.log_metric("best_mae", best_score)
         mlflow.log_dict(best_params, "best_params.json")
-        mlflow.set_tag("git_commit", git_commit)
-        mlflow.set_tag("git_dirty", str(git_dirty).lower())
+        log_run_metadata(git_commit, git_dirty, f"{config['model']['name']}_hpo")
     return {
         "best_params": best_params, 
         "best_mae": best_score, 
@@ -131,19 +137,20 @@ def main():
     config_path = Path(args.config)
     config = load_config(config_path) 
     validate_config(config)
-    train_path = Path(PROJECT_ROOT / config['data']['train_path'])
-    test_path = Path(PROJECT_ROOT / config['data']['test_path'])
-    train_df, test_df = load_raw_data(train_path, test_path)
+    git_commit, git_dirty = get_git_info()
+    train_path = Path(PROJECT_ROOT / config["data"]["train_path"])
     if args.mode in ["train", "hpo"]: 
+        test_path = Path(PROJECT_ROOT / config["data"]["test_path"])
+        train_df, test_df = load_raw_data(train_path, test_path)
         X_train, y_train, X_val, y_val, X_test, test_ids = prepare_and_split_data(train_df, test_df, config)
-        git_commit, git_dirty = get_git_info()
         if args.mode == "train":
             run_training(config, git_commit, git_dirty, X_train, y_train, X_val, y_val)
         elif args.mode == "hpo":
             results=run_hpo(config, git_commit, git_dirty, X_train, y_train, X_val, y_val)
             print(results)
     elif args.mode == "backtest": 
-        run_backtest(config, train_df)
+        train_df = load_raw_data(train_path) 
+        run_backtest(config, git_commit, git_dirty, train_df)
     
     
 if __name__ == "__main__": 
