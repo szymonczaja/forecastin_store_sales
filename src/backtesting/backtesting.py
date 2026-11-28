@@ -1,5 +1,6 @@
 import pandas as pd
-from src.train import train_model, predict, calc_mae, calc_rmsle
+from src.train import ModelTrainer
+from src.evaluate import calc_mae, calc_rmsle
 from src.preprocessing.preprocessing import preprocessor, convert_object_to_category
 from src.preprocessing.external_data import merge_external_data
 
@@ -10,6 +11,10 @@ def generate_time_splits(df, initial_train_end, validation_days, n_folds) -> lis
         raise ValueError("Validation days must be greater than 0")
     if n_folds <= 0: 
         raise ValueError("n_folds must be greater than 0")
+    if not pd.api.types.is_datetime64_any_dtype(df['date']):
+        raise TypeError("'date' column must have datetime dtype.")
+    if df.empty:
+        raise ValueError("Input DataFrame is empty!")
     initial_train_end = pd.Timestamp(initial_train_end)
     train_end = initial_train_end
     val_start = train_end + pd.Timedelta(days=1) 
@@ -56,29 +61,39 @@ def split_fold_data(df, fold, external_data, feature_config):
     y_val = val_df['sales']
     return X_train, y_train, X_val, y_val 
 
+class Backtester: 
+    def __init__(self, model_params, early_stopping_rounds, eval_metric, 
+                 feature_config, external_data): 
+        self.model_params = model_params.copy()
+        self.early_stopping_rounds = early_stopping_rounds 
+        self.eval_metric = eval_metric 
+        self.feature_config = feature_config.copy()
+        self.external_data = external_data 
 
-def run_backtesting(df, folds, model_params, early_stopping_rounds, eval_metric, feature_config, external_data): 
-    """Run backtest for all folds"""
-    results = [] 
-    for fold in folds: 
-        X_train, y_train, X_val, y_val = split_fold_data(df, fold, external_data, feature_config)
-        model = train_model(X_train, y_train, X_val, y_val, model_params, early_stopping_rounds, eval_metric)
-        y_pred = predict(model, X_val)
+    def _run_fold(self, df, fold): 
+        X_train, y_train, X_val, y_val = split_fold_data(df, fold, self.external_data, self.feature_config)
+        trainer = ModelTrainer(self.model_params, self.early_stopping_rounds, self.eval_metric)
+        trainer.fit(X_train, y_train, X_val, y_val)
+        y_pred = trainer.predict(X_val) 
         rmsle = calc_rmsle(y_val, y_pred) 
         mae = calc_mae(y_val, y_pred) 
-        fold_res = {'train_start' : fold['train_start'], 
-                    'train_end' : fold['train_end'],
-                    'val_start': fold['val_start'], 
-                    'val_end' : fold['val_end'],
-                    'rmsle' : rmsle,
-                    'mae' : mae, 
-                    'best_iteration' : model.best_iteration_
-                    }
-        results.append(fold_res)
-    return results
+        fold_result = {'train_start' : fold['train_start'], 
+                        'train_end' : fold['train_end'],
+                        'val_start': fold['val_start'], 
+                        'val_end' : fold['val_end'],
+                        'rmsle' : rmsle,
+                        'mae' : mae, 
+                        'best_iteration' : trainer.best_iteration
+                        }
+        return fold_result
+
+    def run(self, df, folds): 
+        return [self._run_fold(df, fold) for fold in folds]
 
 
 def aggregate_results(results): 
+    if not results: 
+        raise ValueError("results list is empty.")
     results_df = pd.DataFrame(results)
     summary = results_df[['rmsle', 'mae']].describe() 
     return results_df, summary 
